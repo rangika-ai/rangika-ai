@@ -3,6 +3,7 @@ import {createServer} from 'node:http';
 import path from 'node:path';
 import chromium from '@sparticuz/chromium';
 import {chromium as playwright} from 'playwright-core';
+import {auditControls} from './ui-controls-audit.mjs';
 const tests=[],errors=[];let browser,server;
 const root=path.resolve('public');
 const check=(name,pass,detail)=>{tests.push({name,pass:!!pass,...(detail===undefined?{}:{detail})});console.log('BROWSER',pass?'PASS':'FAIL',name);};
@@ -75,6 +76,7 @@ try{
  await page.screenshot({path:'public/audit/mobile.png',fullPage:true});
  await page.emulateMedia({reducedMotion:'reduce'});const reduced=await page.evaluate(()=>[...document.querySelectorAll('.osd-fractal-provisional')].every(x=>getComputedStyle(x).animationName==='none'));check('Reduced-motion preference respected',reduced);
  await page.setViewportSize({width:1440,height:1000});await page.emulateMedia({reducedMotion:'no-preference'});
+ await auditControls(page,check);
  await page.evaluate(o=>{state.currentIndex=o.cursor;state.selectedDate=o.date;renderAll(false);},original);
  await writeFile('public/audit/controls.json',JSON.stringify(initial.buttons,null,2));
  check('No JavaScript page errors',errors.length===0,errors);
@@ -83,3 +85,4 @@ finally{await browser?.close();if(server)await new Promise(r=>server.close(r));}
 const report={passed:tests.filter(t=>t.pass).length,total:tests.length,pass:tests.every(t=>t.pass),tests,errors};
 await writeFile('public/browser-audit.json',JSON.stringify(report,null,2));
 console.log('BROWSER AUDIT:',report.passed+'/'+report.total);
+if(!report.pass)throw new Error('Browser/UI audit failed. See browser-audit.json and build logs.');

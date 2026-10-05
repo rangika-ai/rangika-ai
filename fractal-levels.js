@@ -1,7 +1,7 @@
 /* OSD Research Lab: causal opposite-edge fractal levels. No future records are read. */
 (function(root){
  'use strict';
- const VERSION='3.5-fractal-levels', PERIOD=1100;
+ const VERSION='3.5.1-fractal-controls', PERIOD=1100;
  const empty=()=>({high:{confirmed:null,candidate:null},low:{confirmed:null,candidate:null}});
  function valid(r){return !!r&&Number.isFinite(r.high)&&Number.isFinite(r.low)&&r.high>=r.low;}
  function qualifies(records,origin,rightCount,side){
@@ -86,7 +86,13 @@
  }
  function sync(){
   const button=document.getElementById('fractalLevelsToggle');
-  if(button){button.textContent=`Fractal levels: ${enabled?'on':'off'}`;button.classList.toggle('active',enabled);button.setAttribute('aria-pressed',String(enabled));}
+  if(button){
+   // Preserve the shared two-line control component on every replay render.
+   const value=button.querySelector('.control-value');
+   if(value)value.textContent=enabled?'On':'Off';
+   button.classList.toggle('active',enabled);
+   button.setAttribute('aria-pressed',String(enabled));
+  }
   document.documentElement.style.setProperty('--osd-fractal-phase',`-${Math.floor((document.timeline?.currentTime||performance.now())%PERIOD)}ms`);
   const strip=document.getElementById('fractalLevelReadout');if(!strip)return;
   strip.hidden=!enabled;if(!enabled)return;
@@ -107,11 +113,36 @@
    [data-role="potential-fractal-overlay"] .potential-fractal-halo,[data-role="potential-fractal-overlay"] .potential-fractal-marker,[data-role="potential-fractal-overlay"] .potential-fractal-core{animation:none!important;}
    #fractalLevelReadout{display:flex;flex-wrap:wrap;gap:5px 14px;padding:7px 12px;border-top:1px solid var(--line-soft);font:700 9px/1.5 var(--mono);background:var(--paper-2);}
    #fractalLevelReadout[hidden]{display:none}
+   /* Extend the existing control grid, not the button's typography or skin. */
+   .forward-value-stack .fib-controls.has-fractal-levels{grid-template-columns:repeat(4,minmax(0,1fr)) 44px;grid-template-areas:"current fractal history depth help";}
+   .fib-controls.has-fractal-levels #currentFibToggle{grid-area:current;}
+   .fib-controls.has-fractal-levels #fractalLevelsToggle{grid-area:fractal;}
+   .fib-controls.has-fractal-levels #fibHistoryToggle{grid-area:history;}
+   .fib-controls.has-fractal-levels .fib-select-control{grid-area:depth;}
+   .fib-controls.has-fractal-levels .fib-help-control{grid-area:help;}
+   .fib-controls.has-fractal-levels button{touch-action:manipulation;}
+   .fib-controls.has-fractal-levels button:focus:not(:focus-visible){outline:none;}
+   .fib-controls.has-fractal-levels button:focus-visible{outline:2px solid var(--green);outline-offset:2px;}
+   @media(max-width:700px){
+    .forward-value-stack .fib-controls.has-fractal-levels{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 44px;grid-template-areas:"current fractal help" "history depth depth";}
+   }
    @media(prefers-reduced-motion:reduce){.osd-fractal-provisional,[data-role="potential-fractal-high"],[data-role="potential-fractal-low"]{animation:none!important;opacity:.7}}
   `;document.head.appendChild(style);
   const anchor=document.getElementById('currentFibToggle');
   if(anchor&&!document.getElementById('fractalLevelsToggle')){
-   const button=document.createElement('button');button.id='fractalLevelsToggle';button.type='button';button.className=anchor.className;button.title='High fractal → candle LOW. Low fractal → candle HIGH. Dashed and blinking after +1; solid after +2. The previous confirmed same-side line stays until a replacement confirms.';button.addEventListener('click',()=>setEnabled(!enabled));anchor.insertAdjacentElement('afterend',button);
+   const button=document.createElement('button');
+   button.id='fractalLevelsToggle';button.type='button';button.className='fib-control-box';
+   button.dataset.sound='toggle';button.setAttribute('aria-label','Fractal levels');
+   button.setAttribute('aria-controls','priceChart fractalLevelReadout');
+   const label=document.createElement('span');label.className='control-label';label.textContent='Fractal levels';
+   const value=document.createElement('b');value.className='control-value';value.textContent=enabled?'On':'Off';
+   button.append(label,value);
+   button.title='High fractal → candle LOW. Low fractal → candle HIGH. Dashed and blinking after +1; solid after +2. The previous confirmed same-side line stays until a replacement confirms.';
+   button.addEventListener('click',()=>setEnabled(!enabled));
+   // Keep native Enter/Space activation without triggering the global replay shortcut.
+   button.addEventListener('keydown',event=>{if(event.key===' '||event.key==='Enter')event.stopPropagation();});
+   anchor.insertAdjacentElement('afterend',button);
+   anchor.closest('.fib-controls')?.classList.add('has-fractal-levels');
   }
   const viewport=document.getElementById('chartViewport');
   if(viewport&&!document.getElementById('fractalLevelReadout')){const strip=document.createElement('div');strip.id='fractalLevelReadout';strip.setAttribute('aria-label','Active opposite-edge fractal levels');viewport.insertAdjacentElement('afterend',strip);}
