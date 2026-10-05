@@ -95,7 +95,8 @@
   if(!all.length){strip.textContent='Fractal levels · no qualifying structure revealed yet.';return;}
   for(const f of all){const span=document.createElement('span');span.style.color=f.side==='high'?'#963f37':'#1e5a38';span.textContent=`${f.side==='high'?'HF low':'LF high'} ${number(f.price)} · ${f.state}`;strip.appendChild(span);}
  }
- function setEnabled(value){enabled=!!value;try{localStorage.setItem(KEY,enabled?'on':'off');}catch{}if(typeof renderAll==='function')renderAll(false);else if(typeof renderChart==='function')renderChart(false);sync();}
+ function dataReady(){return typeof state!=='undefined'&&!!state.records?.[state.currentIndex];}
+ function setEnabled(value){enabled=!!value;try{localStorage.setItem(KEY,enabled?'on':'off');}catch{}if(dataReady()){if(typeof renderAll==='function')renderAll(false);else if(typeof renderChart==='function')renderChart(false);}sync();}
  root.OSDFractalLevels={version:VERSION,snapshot,svg,scaleValues:cursor=>enabled?active(cursor).map(f=>f.price):[],selfTest,setEnabled,isEnabled:()=>enabled};
  function bind(){
   if(document.getElementById('osd-fractal-level-style'))return;
@@ -117,12 +118,12 @@
   if(typeof renderChart==='function'){const base=renderChart;renderChart=function(){const value=base.apply(this,arguments);sync();return value;};root.renderChart=renderChart;}
   const baseTest=root.runSelfTest;
   if(typeof baseTest==='function'){
-   root.runSelfTest=function(){const prior=baseTest.apply(this,arguments)!==false,report=selfTest();const el=document.getElementById('selfTest');if(el){let value={};try{value=JSON.parse(el.textContent||'{}')}catch{}value.fractalOppositeEdgeStatus=report.pass?'pass':'fail';value.fractalLevelTests={passed:report.passed,total:report.total};value.fractalLevelVersion=VERSION;if(!report.pass)value.status='fail';el.textContent=JSON.stringify(value);}return prior&&report.pass;};
+   root.runSelfTest=function(){const report=selfTest();if(!dataReady())return report.pass;const prior=baseTest.apply(this,arguments)!==false;const el=document.getElementById('selfTest');if(el){let value={};try{value=JSON.parse(el.textContent||'{}')}catch{}value.fractalOppositeEdgeStatus=report.pass?'pass':'fail';value.fractalLevelTests={passed:report.passed,total:report.total};value.fractalLevelVersion=VERSION;if(!report.pass)value.status='fail';el.textContent=JSON.stringify(value);}return prior&&report.pass;};
    try{runSelfTest=root.runSelfTest;}catch{}
   }
   if(typeof HELP_CONTENT!=='undefined')HELP_CONTENT.fractalLevels={title:'Developing fractal levels',body:'A high fractal marks the LOW of its candle. A low fractal marks the HIGH of its candle. After one supporting candle closes, symbol and level blink together. After the second supporting candle closes, a valid fractal becomes solid; an invalid candidate disappears. High and low structures are independent. A candidate does not remove an older confirmed same-side level: only a new confirmation replaces it.',formula:'Candidate known at i+1; confirmation known at i+2. Equal extremes are not accepted in this strict five-bar implementation.'};
-  if(typeof renderAll==='function')renderAll(false);else if(typeof renderChart==='function')renderChart(false);
-  sync();root.runSelfTest?.();
+  if(dataReady()){if(typeof renderAll==='function')renderAll(false);else if(typeof renderChart==='function')renderChart(false);root.runSelfTest?.();}
+  sync();
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();
 })(globalThis);
