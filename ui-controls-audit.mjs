@@ -3,7 +3,14 @@ import {mkdir,writeFile} from 'node:fs/promises';
 // Called by the existing browser audit with the same real app and error listener.
 export async function auditControls(page,record){
  const check=(name,pass,detail)=>{record(name,pass,detail);if(!pass)console.log('UI_FAILURE_DETAIL',name,JSON.stringify(detail));};
+ try{
  await mkdir('public/audit',{recursive:true});
+ // Exercise the normal onboarding flow rather than clicking through a modal.
+ if(await page.locator('#welcomeModal.open').isVisible()){
+  await page.locator('#dontShowWelcome').check();
+  await page.locator('#welcomeStartBtn').click();
+  await page.locator('#welcomeModal').waitFor({state:'hidden'});
+ }
  const original=await page.evaluate(()=>({cursor:state.currentIndex,enabled:OSDFractalLevels.isEnabled()}));
  const button=page.locator('#fractalLevelsToggle');
  const widths=[1920,1440,1280,1024,768,700,430,390,320];
@@ -37,7 +44,9 @@ export async function auditControls(page,record){
   }
  }
  await page.setViewportSize({width:1440,height:1000});await page.waitForTimeout(160);
- await button.click();await page.mouse.move(0,0);await page.waitForTimeout(130);
+ await button.evaluate(el=>el.scrollIntoView({block:'center',behavior:'instant'}));await page.waitForTimeout(160);
+ console.log('UI_POINTER_TARGET',JSON.stringify(await button.evaluate(el=>{const r=el.getBoundingClientRect();return {target:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML?.slice(0,400),modals:[...document.querySelectorAll('.modal-backdrop.open')].map(x=>x.id)};})));
+ await button.click({timeout:10000});await page.mouse.move(0,0);await page.waitForTimeout(130);
  const off=await button.evaluate(el=>({label:el.querySelector('.control-label')?.textContent,value:el.querySelector('.control-value')?.textContent,pressed:el.getAttribute('aria-pressed'),active:el.classList.contains('active'),outline:getComputedStyle(el).outlineStyle,lines:document.querySelectorAll('[data-role="fractal-opposite-edge-line"]').length,hidden:document.getElementById('fractalLevelReadout').hidden}));
  check('UI: off state preserves label and removes levels',off.label==='Fractal levels'&&off.value==='Off'&&off.pressed==='false'&&!off.active&&off.lines===0&&off.hidden,off);
  check('UI: pointer click has no persistent focus ring',off.outline==='none',off.outline);
@@ -64,4 +73,5 @@ export async function auditControls(page,record){
  const image=await page.locator('.fib-controls.has-fractal-levels').screenshot();
  await writeFile('public/audit/button-preview.json',JSON.stringify({mime:'image/png',base64:image.toString('base64')}));
  await writeFile('public/audit/ui-controls.json',JSON.stringify({measurements,version:'3.5.1-fractal-controls'},null,2));
+ }catch(error){console.log('UI_AUDIT_EXCEPTION',String(error.stack||error));throw error;}
 }
