@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "framework": null,
+  "buildCommand": "node build.mjs",
+  "outputDirectory": "public",
+  "installCommand": "",
+  "ignoreCommand": "node -e \"process.exit(process.env.VERCEL_PROJECT_ID === 'prj_UIFqGE0OaGAgNHCFeZQsgyHHrt0e' ? 1 : 0)\"",
+  "git": {"deploymentEnabled": {"osd-fractal-levels-preview": true, "main": false}},
+  "headers": [{"source": "/(.*)", "headers": [{"key": "X-Robots-Tag", "value": "noindex, nofollow"}]}]
+}
