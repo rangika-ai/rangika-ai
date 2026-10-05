@@ -26,7 +26,16 @@ const originalSHA1=createHash('sha1').update(original).digest('hex');
 if(originalSHA1!=='8bc124c49f1d31062923438ed8659863d7e763f4')throw new Error('The reference source changed; review it before applying the patch.');
 console.log('Original application recovered:',original.length,'bytes; SHA1',originalSHA1);
 const dependencies=['data/manifest.json','data/ndaq100-h1.js','data/ndaq100-d1.js','data/ndaq100-h1.json.gz','data/ndaq100-d1.json.gz','OSD_Kelly_Edge_Lab_Data_Template.csv','DATA_UPDATE_GUIDE.md','README.md','RELEASE_NOTES.md','examples/Observation_Study_Card_Example.svg','previews/Entry_Hypothesis_Ready_Desktop.png','previews/Entry_Hypothesis_Ready_Mobile.png','previews/Entry_Hypothesis_Required_Desktop.png','previews/Entry_Hypothesis_Required_Mobile.png','previews/Observation_Study_Card_Hypothesis_Reflection_Desktop.png','previews/Observation_Study_Card_Hypothesis_Reflection_Mobile.png','previews/Post_Study_Reflection_Desktop.png'];
-for(const file of dependencies){const bytes=await retrieve('/'+file);await mkdir(path.dirname(path.join('public',file)),{recursive:true});await writeFile(path.join('public',file),bytes);console.log('Retained asset:',file,bytes.length);}
+const retained=[],skipped=[];
+for(const file of dependencies){
+ let bytes;
+ try{bytes=await retrieve('/'+file);}catch(e){
+  const core=file.startsWith('data/')||file==='OSD_Kelly_Edge_Lab_Data_Template.csv';
+  if(!core&&String(e.message).includes('HTTP 404')){skipped.push(file);console.log('Optional reference asset not published:',file);continue;}
+  throw e;
+ }
+ await mkdir(path.dirname(path.join('public',file)),{recursive:true});await writeFile(path.join('public',file),bytes);retained.push(file);console.log('Retained asset:',file,bytes.length);
+}
 await writeFile('public/baseline.html',html);
 const lines=html.split('\n');
 const matches=[];for(let i=0;i<lines.length;i++){if(/function\s+[^ (]*(?:[Ff]ractal|[Cc]hart)|(?:window\.)?renderChart\s*=|const state\s*=|let state\s*=/.test(lines[i]))matches.push({line:i+1,text:lines[i].slice(0,240)});}
@@ -53,10 +62,10 @@ html=html.replace(mark,"out+=(window.OSDFractalLevels?.svg({start,end,step,x,y,m
 html=html.replace(/<\/body>/i,`<script>\n${patch}\n</script>\n</body>`);
 console.log('Fractal engine tests:',unit.passed+'/'+unit.total,'; renderer integrations:',integrations.length);
 await writeFile('public/index.html',html);
-await writeFile('public/build-report.json',JSON.stringify({originalSHA1,originalBytes:original.length,patchedBytes:Buffer.byteLength(html),featureInstalled:true,integrations,preservedAssets:dependencies},null,2));
+await writeFile('public/build-report.json',JSON.stringify({originalSHA1,originalBytes:original.length,patchedBytes:Buffer.byteLength(html),featureInstalled:true,integrations,preservedAssets:retained,optionalUnpublishedAssets:skipped},null,2));
 await import('./browser-audit.mjs');
 const files={'index.html':new Uint8Array(Buffer.from(html))};
-for(const file of dependencies)files[file]=new Uint8Array(await readFile(path.join('public',file)));
+for(const file of retained)files[file]=new Uint8Array(await readFile(path.join('public',file)));
 for(const file of ['engine-audit.json','browser-audit.json','build-report.json'])files[file]=new Uint8Array(await readFile(path.join('public',file)));
 files['FRACTAL_LEVELS_README.txt']=new Uint8Array(Buffer.from('OSD Research Lab — original application plus opposite-edge fractal levels.\nOpen index.html in a browser, or host this folder as a static website.\nHigh-fractal line = LOW of fractal candle. Low-fractal line = HIGH of fractal candle.\nAfter +1 closed candle: blinking candidate. After +2: confirmed solid line or removal.\nA prior confirmed same-type level remains until its replacement confirms.\nOriginal application workflows and data are preserved. No Replit subscription or API key is required.\n'));
 await writeFile('public/OSD_Research_Lab_Exact.zip',zipSync(files,{level:6}));
