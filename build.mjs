@@ -42,11 +42,15 @@ const matches=[];for(let i=0;i<lines.length;i++){if(/function\s+[^ (]*(?:[Ff]rac
 await writeFile('public/inspection-index.json',JSON.stringify({bytes:original.length,originalSHA1,lineCount:lines.length,matches},null,2));
 await mkdir('public/inspect',{recursive:true});
 for(let i=0;i<lines.length;i+=100){await writeFile(`public/inspect/${i+1}.txt`,lines.slice(i,i+100).map((l,j)=>`${i+j+1}: ${l}`).join('\n'));}
-const patch=await readFile('fractal-levels.js','utf8');
+const structurePatch=await readFile('structure-view.js','utf8');
+const patch=(await readFile('fractal-levels.js','utf8'))+'\n'+structurePatch;
 const context=vm.createContext({});vm.runInContext(patch,context);
 const unit=context.OSDFractalEngine.selfTest();
 await writeFile('public/engine-audit.json',JSON.stringify(unit,null,2));
 if(!unit.pass)throw new Error('Fractal unit tests failed.');
+const structureUnit=context.OSDStructureEngine.selfTest();
+await writeFile('public/structure-engine-audit.json',JSON.stringify(structureUnit,null,2));
+if(!structureUnit.pass)throw new Error('Structure history unit tests failed.');
 const integrations=[],scaleNeedle='let min=Math.min(...values),max=Math.max(...values)';
 const scaleAdd='values.push(...(window.OSDFractalLevels?.scaleValues(state.currentIndex)||[]));'+scaleNeedle;
 for(const [startMark,endMark] of [['renderChart=function(scrollRight=false){','function bindFibControls(){'],['function drawStructuralChartOverlay(){','const baseExportBackupStructural='],['function structuralGeometry(svg,t,a){','function drawRiskZoneUnderlay(){']]){
@@ -62,10 +66,14 @@ html=html.replace(mark,"out+=(window.OSDFractalLevels?.svg({start,end,step,x,y,m
 html=html.replace(/<\/body>/i,`<script>\n${patch}\n</script>\n</body>`);
 console.log('Fractal engine tests:',unit.passed+'/'+unit.total,'; renderer integrations:',integrations.length);
 await writeFile('public/index.html',html);
-await writeFile('public/build-report.json',JSON.stringify({originalSHA1,originalBytes:original.length,patchedBytes:Buffer.byteLength(html),featureInstalled:true,integrations,preservedAssets:retained,optionalUnpublishedAssets:skipped},null,2));
+await writeFile('public/build-report.json',JSON.stringify({originalSHA1,originalBytes:original.length,patchedBytes:Buffer.byteLength(html),featureInstalled:true,structureViewVersion:structureUnit.version,integrations,preservedAssets:retained,optionalUnpublishedAssets:skipped},null,2));
 await import('./browser-audit.mjs');
+await import('./structure-audit-runner.mjs');
+const oldBrowser=JSON.parse(await readFile('public/browser-audit.json','utf8'));
+const structureBrowser=JSON.parse(await readFile('public/structure-browser-audit.json','utf8'));
+await writeFile('public/audit-summary.json',JSON.stringify({version:structureUnit.version,fractalEngine:{passed:unit.passed,total:unit.total},historyEngine:{passed:structureUnit.passed,total:structureUnit.total},browser:{passed:oldBrowser.passed+structureBrowser.passed,total:oldBrowser.total+structureBrowser.total},pass:unit.pass&&structureUnit.pass&&oldBrowser.pass&&structureBrowser.pass},null,2));
 const files={'index.html':new Uint8Array(Buffer.from(html))};
 for(const file of retained)files[file]=new Uint8Array(await readFile(path.join('public',file)));
-for(const file of ['engine-audit.json','browser-audit.json','build-report.json'])files[file]=new Uint8Array(await readFile(path.join('public',file)));
-files['FRACTAL_LEVELS_README.txt']=new Uint8Array(Buffer.from('OSD Research Lab — original application plus opposite-edge fractal levels.\nOpen index.html in a browser, or host this folder as a static website.\nHigh-fractal line = LOW of fractal candle. Low-fractal line = HIGH of fractal candle.\nAfter +1 closed candle: blinking candidate. After +2: confirmed solid line or removal.\nA prior confirmed same-type level remains until its replacement confirms.\nOriginal application workflows and data are preserved. No Replit subscription or API key is required.\n'));
+for(const file of ['engine-audit.json','structure-engine-audit.json','browser-audit.json','structure-browser-audit.json','audit-summary.json','build-report.json'])files[file]=new Uint8Array(await readFile(path.join('public',file)));
+files['FRACTAL_LEVELS_README.txt']=new Uint8Array(Buffer.from('OSD Research Lab — original application plus opposite-edge fractal levels.\nOpen index.html in a browser, or host this folder as a static website.\nHigh-fractal line = LOW of fractal candle. Low-fractal line = HIGH of fractal candle.\nAfter +1 closed candle: blinking candidate. After +2: confirmed solid line or removal.\nA prior confirmed same-type level remains until its replacement confirms.\nCandles Off hides H1 price bars without moving indicators or changing calculations. Fractal History keeps earlier confirmed same-type levels as lighter segments.\nOriginal application workflows and data are preserved. No Replit subscription or API key is required.\n'));
 await writeFile('public/OSD_Research_Lab_Exact.zip',zipSync(files,{level:6}));
