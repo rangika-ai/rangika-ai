@@ -37,6 +37,7 @@ try{
  const readouts=await page.locator('#fractalLevelReadout span').evaluateAll(a=>a.map(el=>({text:el.textContent,colour:getComputedStyle(el).color})));
  check('Readout colours match their series',readouts.length>=2&&readouts.every(x=>x.colour===(x.text.startsWith('HF low')?rgb.high:rgb.low)),readouts);
  for(const side of ['high','low']){
+  await setStudy(page);
   check(`${side}: confirmed symbols match their corresponding levels`,await page.locator(`[data-role="fractal-${side}"]`).evaluateAll((a,expected)=>a.length>0&&a.every(el=>el.getAttribute('fill')===expected),colour[side]));
   const candidate=await page.evaluate(side=>{for(let n=3;n<1000;n++){const f=OSDFractalEngine.compute(state.records,n)[side].candidate;if(f)return n;}return null;},side);
   await page.evaluate(n=>{state.currentIndex=n;renderAll(false);},candidate);
