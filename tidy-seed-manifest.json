@@ -1,0 +1,21 @@
+{
+  "baseline": "3.6.3",
+  "assets": {
+    "data/manifest.json": "70a83448c94603c1929e7fc36f1a82b9f542755c21bb88a7e914aefff75176ad",
+    "data/ndaq100-h1.js": "c5d44155875aacd1e50c084fec5590b4fbc2b715380c8a0706489ed64ab270a8",
+    "data/ndaq100-d1.js": "baff49ac2585349ea620b76a3dd369a5688c477bde7cf721b6ba609ebe761281",
+    "data/ndaq100-h1.json.gz": "046ea67e6c9d6bb0cc46f1864ae1c84ef4864e8f209014ea66bdffa7581b5a61",
+    "data/ndaq100-d1.json.gz": "629f9af0d76a527d383f710b5aa1342a0da453f1dbb0bdc1e5d73957bdf50c42",
+    "OSD_Kelly_Edge_Lab_Data_Template.csv": "abfe758eda4cae0ea1549a8f6ecaf543d3195ab835e766470d1af79d673d602a",
+    "DATA_UPDATE_GUIDE.md": "01f67be3433544126fa893994c30c4cde6da9efba8b98c51d2fb064833d05a3f",
+    "RELEASE_NOTES.md": "c7b8faaa9f4e8c1c81878ba647f91096fb619134a2390792285e3ff1a6798428",
+    "examples/Observation_Study_Card_Example.svg": "da91a6fc1b751a5948de436b3f830c5f63a5fb47e8ad1a21866d0cf2a9192e0d",
+    "previews/Entry_Hypothesis_Ready_Desktop.png": "a6d4b3c4644a1f9e403962eb4dab63f41ea362dc63180a4c1a6f247e911de532",
+    "previews/Entry_Hypothesis_Ready_Mobile.png": "acb755293988c2c59072202d44abb0627a03bac58c6e9cc3c3a147b0d3650f4b",
+    "previews/Entry_Hypothesis_Required_Desktop.png": "dcdae6be8e230a8a1697b828a5f65f58c1d44962234f92dc679110b317973c10",
+    "previews/Entry_Hypothesis_Required_Mobile.png": "45f879bc12e110076f333b5b856093d26faaf35752922e706df10dce615f1e69",
+    "previews/Observation_Study_Card_Hypothesis_Reflection_Desktop.png": "fb1540740fde33b11d925165ed804453956bc04aaaca344b7ee28be5cd5ecead",
+    "previews/Observation_Study_Card_Hypothesis_Reflection_Mobile.png": "9b3563f3d2bc91ef6e3d8f0f4a74f35d631469b32fe527497bf8cde5f80a29bd",
+    "previews/Post_Study_Reflection_Desktop.png": "9349b8ea8b65660a1fbf9d3f6affc13d1f0577d129af691ee96e5bb97edb00a1"
+  }
+}

@@ -1,0 +1,64 @@
+<section id="replayControls" class="osd-workspace replay-toolbar" aria-label="Chart workspace">
+  <div class="osd-replay-row">
+    <div class="osd-time"><strong id="replayClock">—</strong><span id="toolbarSession"></span></div>
+    <div class="osd-replay-actions" role="group" aria-label="Replay and candle visibility">
+      <button class="btn small" id="prevBtn" data-sound="back" type="button">← Previous</button>
+      <button class="btn small primary" id="nextBtn" data-sound="next" type="button">Next →</button>
+      <button class="btn small" id="chartCandlesToggle" data-sound="toggle" type="button" aria-controls="priceChart">Hide candles</button>
+    </div>
+    <details id="chartMore" class="osd-more">
+      <summary class="btn small" aria-controls="chartMoreActions">More <span aria-hidden="true">⌄</span></summary>
+      <div id="chartMoreActions" class="chart-actions osd-more-actions">
+        <button class="btn small" id="rewindBtn" data-sound="rewind" type="button">⟲ Rewind to start</button>
+        <button class="btn small chart-voice-toggle" id="chartVoiceToggle" data-sound="toggle" type="button" aria-pressed="false"><span class="chart-voice-glyph" aria-hidden="true">V</span><span class="chart-voice-dot" aria-hidden="true"></span><span class="chart-voice-label">Voice off</span></button>
+        <button class="btn small" id="exportChartBtn" data-sound="export" type="button">Export chart SVG</button>
+        <button class="btn small" data-info="chart" data-sound="click" type="button">Chart help</button>
+        <p id="replayProgress" class="osd-menu-note">Select a date and start research.</p>
+      </div>
+    </details>
+  </div>
+  <div class="osd-layer-row">
+    <span class="osd-layer-heading">Layers</span>
+    <div class="osd-layer-buttons" role="group" aria-label="Chart line categories">
+      <button class="osd-layer" id="previousDayLayerToggle" type="button" data-category="previousDay" data-sound="toggle" aria-pressed="true" aria-controls="priceChart"><span class="osd-check" aria-hidden="true">✓</span><i aria-hidden="true"></i><span>PDH/PDL</span></button>
+      <button class="osd-layer" id="fractalLevelsToggle" type="button" data-category="fractal" data-sound="toggle" aria-pressed="true" aria-controls="priceChart"><span class="osd-check" aria-hidden="true">✓</span><i aria-hidden="true"></i><span>Fractal levels</span></button>
+      <button class="osd-layer" id="pivotLayerToggle" type="button" data-category="pivot" data-sound="toggle" aria-pressed="true" aria-controls="priceChart"><span class="osd-check" aria-hidden="true">✓</span><i aria-hidden="true"></i><span>Pivots</span></button>
+      <button class="osd-layer" id="fibLayerToggle" type="button" data-category="fibonacci" data-sound="toggle" aria-pressed="true" aria-controls="priceChart"><span class="osd-check" aria-hidden="true">✓</span><i aria-hidden="true"></i><span>Fibonacci</span></button>
+    </div>
+    <button class="btn small" id="chartSettingsToggle" type="button" aria-expanded="false" aria-controls="chartSettings">Chart settings <span aria-hidden="true">⌄</span></button>
+  </div>
+  <div id="chartSettings" class="osd-settings" role="region" aria-label="Chart settings" hidden>
+    <div class="osd-settings-head"><span>Chart settings <small>Applies to H1. D1 context is independent.</small></span><button class="btn small" id="closeChartSettings" type="button">Done</button></div>
+    <div class="osd-settings-grid">
+      <section class="osd-setting-group" data-category="previousDay" aria-labelledby="settingsDayTitle">
+        <h3 id="settingsDayTitle">Previous-day levels <small data-layer-status="previousDay"></small></h3>
+        <dl class="osd-values"><div><dt>Source day</dt><dd id="toolbarDaySource">—</dd></div><div><dt>PDH</dt><dd id="toolbarPDH">—</dd></div><div><dt>PDL</dt><dd id="toolbarPDL">—</dd></div></dl>
+        <p>Both levels share slate blue. The Layers button shows or hides them together.</p>
+      </section>
+      <section class="osd-setting-group" data-category="fractal" aria-labelledby="settingsFractalTitle">
+        <h3 id="settingsFractalTitle">Fractal levels <small data-layer-status="fractal"></small></h3>
+        <button class="osd-setting-toggle" id="fractalHistoryToggle" type="button" data-sound="toggle" aria-pressed="true"><span class="control-label">Historical levels</span><b class="control-value">On</b></button>
+        <div id="fractalLevelReadout" aria-label="Current fractal levels"></div>
+        <p>HF LOW = low of the high-fractal candle. LF HIGH = high of the low-fractal candle.</p><p>+1: blinking candidate. +2: confirmed or removed. Historical segments stay lighter.</p>
+      </section>
+      <section class="osd-setting-group" data-category="pivot" aria-labelledby="settingsPivotTitle">
+        <h3 id="settingsPivotTitle">Daily pivots <small data-layer-status="pivot"></small></h3>
+        <div id="pivotControls">
+          <button class="osd-setting-toggle" id="dailyPivotToggle" type="button" data-sound="toggle" aria-pressed="true"><span class="control-label">Current day</span><b class="control-value">On</b></button>
+          <label class="osd-select" for="pivotLevelSet">Levels<select id="pivotLevelSet"><option value="P">P only</option><option value="P_R1S1">P + R1 / S1</option><option value="P_R1S1_R2S2">P + R1 / S1 + R2 / S2</option></select></label>
+          <button class="osd-setting-toggle" id="pivotHistoryToggle" type="button" data-sound="toggle" aria-pressed="false"><span class="control-label">History</span><b class="control-value">Off</b></button>
+          <label class="osd-select" id="pivotDepthControl" for="pivotHistoryDepth" hidden>History depth<select id="pivotHistoryDepth"><option value="1">1 day</option><option value="2">2 days</option><option value="3">3 days</option><option value="5">5 days</option><option value="99">All visible</option></select></label>
+        </div>
+        <dl class="osd-values"><div><dt>Source day</dt><dd id="pivotSourceDay">—</dd></div><div><dt>P</dt><dd id="pivotPValue">—</dd></div><div data-pivot-detail="R1"><dt>R1</dt><dd id="pivotR1Value">—</dd></div><div data-pivot-detail="S1"><dt>S1</dt><dd id="pivotS1Value">—</dd></div><div data-pivot-detail="R2"><dt>R2</dt><dd id="toolbarPivotR2">—</dd></div><div data-pivot-detail="S2"><dt>S2</dt><dd id="toolbarPivotS2">—</dd></div></dl>
+      </section>
+      <section class="osd-setting-group" data-category="fibonacci" aria-labelledby="settingsFibTitle">
+        <h3 id="settingsFibTitle">Fibonacci <small data-layer-status="fibonacci"></small></h3>
+        <button class="osd-setting-toggle" id="currentFibToggle" type="button" data-sound="toggle" aria-pressed="true"><span class="control-label">Current projections</span><b class="control-value">On</b></button>
+        <button class="osd-setting-toggle" id="fibHistoryToggle" type="button" data-sound="toggle" aria-pressed="false"><span class="control-label">History</span><b class="control-value">Off</b></button>
+        <label class="osd-select" id="fibDepthControl" for="fibHistoryDepth" hidden>History depth<select id="fibHistoryDepth"><option value="4">4 bars</option><option value="6">6 bars</option><option value="8">8 bars</option><option value="12">12 bars</option><option value="99">All visible</option></select></label>
+        <dl class="osd-values" id="fibReadout"><div><dt>Source hour</dt><dd id="fibSource">—</dd></div><div><dt>Range</dt><dd id="fibRange">—</dd></div><div><dt>Upper 1.618</dt><dd id="fibUpper">—</dd></div><div><dt>Lower 1.618</dt><dd id="fibLower">—</dd></div></dl>
+      </section>
+    </div>
+    <p class="osd-settings-note">One colour per category. Strong lines are current; faint lines are history. Hiding a layer preserves its settings. Fractal symbols remain independent of the fractal-level switch.</p>
+  </div>
+</section>
