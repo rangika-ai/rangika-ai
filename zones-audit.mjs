@@ -1,0 +1,93 @@
+import {readFile,writeFile,mkdir} from 'node:fs/promises';
+import {createServer} from 'node:http';
+import {createHash} from 'node:crypto';
+import vm from 'node:vm';
+import path from 'node:path';
+import c from '@sparticuz/chromium';
+import {chromium} from 'playwright-core';
+const tests=[],errors=[],engineTests=[],remote=process.env.OSD_AUDIT_URL,dir=remote?'live-audit':'audit';let browser,server,engines;
+const check=(name,pass,detail)=>{tests.push({name,pass:!!pass,...(detail===undefined?{}:{detail})});console.log(pass?'PASS':'FAIL',name);if(!pass)console.log(JSON.stringify(detail));};
+const engine=(name,fn)=>{try{if(!fn())throw Error('Assertion');engineTests.push({name,pass:true});}catch(e){engineTests.push({name,pass:false,error:e.message});}};
+const ctx=vm.createContext({});for(const f of ['fractal-levels.js','structure-view.js','fractal-zones.js'])vm.runInContext(await readFile(f,'utf8'),ctx);
+const compute=(r,c)=>ctx.OSDFractalZoneEngine.compute(r,c),rs=(h,l)=>h.map((high,i)=>({high,low:l[i]}));
+const both=rs([10,12,20,14,13,15,24,18,17],[8,7,1,6,5,7,9,6,5]);
+engine('No zone on the fractal origin candle',()=>!compute(both,2).confirmed&&!compute(both,2).provisional);
+engine('Two provisional boundaries create a band only at +1',()=>compute(both,3).provisional.from===3&&!compute(both,3).confirmed);
+engine('Opposite-edge prices give bounds 1 and 20',()=>compute(both,3).provisional.lower===1&&compute(both,3).provisional.upper===20);
+engine('First confirmed pair is known at +2',()=>compute(both,4).confirmed.from===4&&!compute(both,4).provisional);
+engine('Candidate replacement retains the confirmed pair',()=>compute(both,7).confirmed.high.origin===2&&compute(both,7).provisional.high.origin===6);
+engine('Provisional band uses candidate opposite edge not extreme',()=>compute(both,7).provisional.lower===9&&compute(both,7).provisional.upper===20);
+engine('New confirmation archives the prior pair at the confirmation bar',()=>compute(both,8).history.at(-1).until===8&&compute(both,8).confirmed.from===8);
+engine('Invalidated candidate leaves no historical ghost zone',()=>{const r=structuredClone(both);r[8].high=25;const z=compute(r,8);return !z.provisional&&z.confirmed.high.origin===2&&z.history.length===0;});
+engine('One missing side produces no fabricated band',()=>{const z=compute(rs([8,9,14,12,11],[4,5,7,6,5]),4);return !z.confirmed&&!z.provisional;});
+engine('Rewind restores provisional pair and removes later history',()=>{compute(both,8);return compute(both,7).provisional.from===7&&compute(both,7).history.length===0;});
+engine('Simultaneous high and low confirmation creates one pair',()=>compute(both,4).history.length===0);
+engine('Invalid cursors are safe',()=>[-1,1.5,9].every(i=>!compute(both,i).confirmed)&&!compute([],0).confirmed);
+engine('Future-index reads throw: every cursor passes',()=>{for(let i=0;i<both.length;i++){const p=new Proxy(both,{get(t,k){if(/^\d+$/.test(String(k))&&+k>i)throw Error('Future index');return Reflect.get(t,k);}});compute(p,i);}return true;});
+engine('Truncated data gives the same zone at every cursor',()=>both.every((_,i)=>JSON.stringify(compute(both,i))===JSON.stringify(compute(both.slice(0,i+1),i))));
+engine('Future edits do not change earlier zones',()=>{const copy=structuredClone(both);for(let i=5;i<copy.length;i++)copy[i]={high:1e6,low:-1e6};return JSON.stringify(compute(copy,4))===JSON.stringify(compute(both,4));});
+engine('Input records are not mutated',()=>{const before=JSON.stringify(both);compute(both,8);return before===JSON.stringify(both);});
+const baseTests=[ctx.OSDFractalEngine.selfTest(),ctx.OSDStructureEngine.selfTest()];engines={passed:baseTests.reduce((n,x)=>n+x.passed,0)+engineTests.filter(x=>x.pass).length,total:baseTests.reduce((n,x)=>n+x.total,0)+engineTests.length,zoneTests:engineTests,pass:baseTests.every(x=>x.pass)&&engineTests.every(x=>x.pass)};
+const geom=()=>[...document.querySelectorAll('#priceChart line,#priceChart path,#priceChart rect,#priceChart text,#priceChart circle,#priceChart polygon')].filter(e=>!e.closest('[data-role="fractal-zones"]')).map(e=>[e.tagName,e.dataset.role||'',...['x','y','x1','y1','x2','y2','cx','cy','r','width','height','d','points','data-price','data-origin','data-until'].map(k=>e.getAttribute(k))]);
+const setup=(i=440)=>{state.currentIndex=i;state.selectedDate=state.records[i].dateKey;state.replayStartIndex=state.dateFirst.get(state.selectedDate);state.contextBars=24;state.trade=null;state.currentFibOn=true;state.fibHistoryOn=true;state.pivotOn=true;state.pivotHistoryOn=true;state.pivotLevelSet='P_R1S1_R2S2';OSDStructureView.setCandles(true);OSDStructureView.setHistory(true);OSDFractalLevels.setEnabled(true);for(const k of ['previousDay','pivot','fibonacci'])OSDChartToolbar.setLayer(k,true);renderAll(false);};
+async function boot(p,u){p.on('pageerror',e=>errors.push(e.message));await p.goto(u,{waitUntil:'load'});await p.waitForFunction(()=>typeof state!=='undefined'&&state.records.length>1000&&window.OSDChartToolbar);await p.waitForTimeout(500);await p.addStyleTag({content:'html{scroll-behavior:auto!important;}'});await p.evaluate(()=>{document.querySelectorAll('.modal-backdrop.open').forEach(e=>e.classList.remove('open'));document.querySelectorAll('.milestone-overlay.show').forEach(e=>e.classList.remove('show'));if(typeof PROD_STORAGE!=='undefined')localStorage.setItem(PROD_STORAGE.welcome,'1');});}
+try{
+ await mkdir('public/'+dir,{recursive:true});const root=path.resolve('public');
+ server=createServer(async(req,res)=>{try{let n=new URL(req.url,'http://localhost').pathname;if(n==='/')n='/index.html';if(n==='/baseline-v370.html')n='/source/zone-baseline-v3.7.0.html';const f=path.resolve(root,'.'+n);if(!f.startsWith(root+path.sep))throw Error('path');const bytes=await readFile(f);res.writeHead(200,{'content-type':f.endsWith('.html')?'text/html':f.endsWith('.js')?'text/javascript':'application/octet-stream'});res.end(bytes);}catch{res.writeHead(404);res.end();}});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ const local=`http://127.0.0.1:${server.address().port}/`,url=remote||local;
+ browser=await chromium.launch({args:c.args,executablePath:await c.executablePath(),headless:true});const context=await browser.newContext({viewport:{width:1440,height:1000}}),p=await context.newPage();
+ await boot(p,url);await p.waitForFunction(()=>window.OSDFloatingNext&&window.OSDFractalZones);
+ const release=JSON.parse(await readFile('public/release.json','utf8')),r=await p.request.get(url),actual=createHash('sha256').update(await r.body()).digest('hex');
+ check('Served HTML matches the tested release checksum',actual===release.sha256,{actual,expected:release.sha256});
+ check('Version 3.7.1 in title and footer',await p.evaluate(()=>document.title.includes('3.7.1')&&document.getElementById('osdReleaseBadge').textContent==='v3.7.1'));
+ check('Shade On and historical zones Off by default',await p.evaluate(()=>OSDFractalZones.getSettings().show&&!OSDFractalZones.getSettings().history));
+ check('Only one Next and one candle visibility button exist',await p.locator('#nextBtn').count()===1&&await p.locator('#chartCandlesToggle').count()===1);
+ check('No duplicate DOM IDs',await p.evaluate(()=>{const ids=[...document.querySelectorAll('[id]')].map(e=>e.id);return ids.length===new Set(ids).size;}));
+ await p.evaluate(setup);
+ const compare=await context.newPage();await boot(compare,local+'baseline-v370.html');
+ for(const i of [40,440,6400,20000,27275]){await p.evaluate(setup,i);await compare.evaluate(setup,i);check('Existing chart coordinates unchanged at cursor '+i,JSON.stringify(await p.evaluate(geom))===JSON.stringify(await compare.evaluate(geom)));}
+ await p.evaluate(setup);
+ const zone=await p.locator('[data-role="fractal-zone"]').count();check('Active zone rendered with both valid boundaries',zone>0,{zone});
+ check('Zones are behind price, indicators and grid',await p.evaluate(()=>{const svg=document.getElementById('priceChart'),z=svg.querySelector('[data-role="fractal-zones"]'),bar=svg.querySelector('[data-role="h1-price-bars"]')||svg.querySelector('[data-role="fractal-opposite-edge-levels"]');return !!z&&!!bar&&!!(z.compareDocumentPosition(bar)&Node.DOCUMENT_POSITION_FOLLOWING);}));
+ check('Band numeric bounds match the selected opposite edges',await p.evaluate(()=>{const z=OSDFractalZones.snapshot();return [...document.querySelectorAll('[data-role="fractal-zone"]')].every(e=>{const a=e.dataset.state==='developing'?z.provisional:z.confirmed;return +e.dataset.low===a.lower&&+e.dataset.high===a.upper;});}));
+ check('Historical zones absent by default',await p.locator('[data-role="fractal-zone"][data-state="history"]').count()===0);
+ const g=await p.evaluate(geom);await p.locator('#chartControlsLink').click();await p.locator('#chartCandlesToggle').click();check('Hide candles leaves all coordinates unchanged',JSON.stringify(g)===JSON.stringify(await p.evaluate(geom)));
+ check('Zone remains visible with candles hidden',await p.locator('[data-role="fractal-zone"]').count()>0);
+ check('Fractal lines share lighter violet and reduced weights',await p.evaluate(()=>[...document.querySelectorAll('[data-role="fractal-opposite-edge-line"],[data-role="fractal-history-line"]')].every(e=>e.getAttribute('stroke')==='#94749f'&&+e.getAttribute('stroke-width')<=1.65&&+e.getAttribute('opacity')<=.82)));
+ await p.locator('#chartSettingsToggle').click();await p.locator('#fractalZoneToggle').click();check('Zone switch hides shading without deleting boundary lines',await p.locator('[data-role="fractal-zone"]').count()===0&&await p.locator('[data-role="fractal-opposite-edge-line"]').count()>0);await p.locator('#fractalZoneToggle').click();
+ await p.locator('#fractalZoneHistoryToggle').click();check('Historical zones appear only on request',await p.locator('[data-role="fractal-zone"][data-state="history"]').count()>0);
+ check('Historical fills are subtler than active fills',await p.evaluate(()=>[...document.querySelectorAll('[data-role="fractal-zone"][data-state="history"]')].every(e=>+e.getAttribute('fill-opacity')===.035)));
+ await p.locator('#fractalHistoryToggle').click();check('History Off removes old bands and disables their control',await p.locator('[data-state="history"][data-role="fractal-zone"]').count()===0&&await p.locator('#fractalZoneHistoryToggle').isDisabled());await p.locator('#fractalHistoryToggle').click();
+ await p.locator('#fractalLevelsToggle').click();check('Fractal category Off hides bands and boundary lines together',await p.locator('[data-role="fractal-zone"]').count()===0&&await p.locator('[data-role="fractal-opposite-edge-line"]').count()===0);await p.locator('#fractalLevelsToggle').click();
+ check('Shading preferences survive category Off/On',await p.locator('[data-role="fractal-zone"][data-state="history"]').count()>0);
+ await p.locator('#fractalZoneHistoryToggle').click();await p.locator('#closeChartSettings').click();
+ const dev=await p.evaluate(()=>{for(let i=100;i<500;i++){const z=OSDFractalZoneEngine.compute(state.records,i);if(z.provisional)return i;}});await p.evaluate(setup,dev);
+ check('Provisional band appears no earlier than +1',await p.evaluate(()=>{const z=OSDFractalZones.snapshot().provisional;return z.from===state.currentIndex&&!!document.querySelector('[data-role="fractal-zone"][data-state="developing"]');}));
+ check('Developing boundaries retain dash and pulse behaviour',await p.evaluate(()=>[...document.querySelectorAll('[data-role="fractal-opposite-edge-line"][data-state="developing"]')].every(e=>!!e.getAttribute('stroke-dasharray')&&getComputedStyle(e.parentElement).animationName==='osdFractalLevelPulse')));
+ await p.evaluate(()=>{OSDFractalZones.set('history',true);state.currentIndex++;renderAll(false);state.currentIndex--;renderAll(false);});check('Rewind recreates the same developing zone',await p.evaluate(i=>OSDFractalZones.snapshot().provisional?.from===i,dev));
+ await p.emulateMedia({reducedMotion:'reduce'});check('Reduced-motion preference stops fractal blinking',await p.evaluate(()=>[...document.querySelectorAll('.osd-fractal-provisional')].every(e=>getComputedStyle(e).animationName==='none')));await p.emulateMedia({reducedMotion:'no-preference'});
+ await p.evaluate(setup);await p.evaluate(()=>OSDFractalZones.set('history',false));
+ for(const [width,height] of [[1920,1080],[1440,900],[960,720],[768,720],[700,600],[640,480],[430,740],[390,700],[320,600]]){
+  await p.setViewportSize({width,height});await p.waitForTimeout(250);await p.evaluate(()=>{window.scrollTo(0,document.getElementById('nextButtonSlot').getBoundingClientRect().top+scrollY-50);document.activeElement?.blur();});await p.waitForTimeout(700);
+  check(`Next remains in toolbar when visible at ${width}px`,await p.evaluate(()=>document.getElementById('nextBtn').parentElement.id==='nextButtonSlot'));
+  await p.evaluate(()=>window.scrollTo(0,document.getElementById('chartViewport').getBoundingClientRect().top+scrollY-20));await p.waitForTimeout(700);
+  check(`Floating Next inside viewport at ${width}x${height}`,await p.evaluate(()=>{const b=document.getElementById('nextBtn'),r=b.getBoundingClientRect();return b.parentElement.id==='floatingNextDock'&&r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===b;}));
+  const i=await p.evaluate(()=>state.currentIndex);await p.locator('#nextBtn').click();check(`Floating click advances exactly one hour at ${width}px`,await p.evaluate(()=>state.currentIndex)===i+1);
+  check(`No horizontal page overflow at ${width}px`,await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  if([960,390].includes(width))await p.screenshot({path:`public/${dir}/floating-${width}.png`});
+ }
+ await p.setViewportSize({width:960,height:720});
+ for(const mode of ['H1','SPLIT','D1']){
+  await p.evaluate(m=>{state.dailyView=m;renderAll(false);window.scrollTo(0,document.querySelector('.daily-context-panel').getBoundingClientRect().top+scrollY+80);document.activeElement?.blur();},mode);await p.waitForTimeout(700);
+  check('Next floats in '+mode+' view',await p.evaluate(()=>OSDFloatingNext.isFloating()));const n=await p.evaluate(()=>state.currentIndex);await p.locator('#nextBtn').click();check('One-step replay in '+mode+' view',await p.evaluate(()=>state.currentIndex)===n+1);
+ }
+ let n=await p.evaluate(()=>state.currentIndex);await p.locator('#nextBtn').focus();await p.keyboard.press('Space');check('Space on floating Next advances once, not twice',await p.evaluate(()=>state.currentIndex)===n+1);n=await p.evaluate(()=>state.currentIndex);await p.keyboard.press('Enter');check('Enter on floating Next advances once',await p.evaluate(()=>state.currentIndex)===n+1);
+ await p.evaluate(()=>openModal('dataModal'));await p.waitForTimeout(100);check('Floating control is removed while a modal is open',await p.locator('#floatingNextDock').isHidden());await p.evaluate(()=>closeModal('dataModal'));await p.waitForTimeout(100);check('Floating control returns after modal closes',await p.locator('#floatingNextDock').isVisible());
+ await p.evaluate(()=>{state.dailyView='H1';state.currentIndex=state.records.length-1;renderAll(false);});await p.waitForTimeout(100);check('At end of dataset the floating Next is disabled',await p.locator('#nextBtn').isDisabled());
+ await p.evaluate(setup);await p.locator('#chartControlsLink').click();check('Same Next node returns to original toolbar',await p.evaluate(()=>document.getElementById('nextBtn').parentElement.id==='nextButtonSlot'));
+ await p.locator('#chartMore summary').click();const download=p.waitForEvent('download');await p.locator('#exportChartBtn').click();const file=await download;const svg=await readFile(await file.path(),'utf8');check('SVG export includes shading and lighter boundaries',svg.includes('data-role="fractal-zone"')&&svg.includes('#94749f'));
+ await p.evaluate(()=>{OSDFractalZones.set('history',true);OSDStructureView.setCandles(false);});await p.reload({waitUntil:'load'});await p.waitForFunction(()=>window.OSDFractalZones&&state.records.length>0);check('Reload restores shading/history/candle preferences',await p.evaluate(()=>OSDFractalZones.getSettings().show&&OSDFractalZones.getSettings().history&&!OSDStructureView.isCandlesOn()));
+ await p.setViewportSize({width:720,height:500});await p.evaluate(()=>{document.body.style.zoom='2';window.scrollTo(0,document.getElementById('chartViewport').getBoundingClientRect().top+scrollY);});await p.waitForTimeout(700);check('Floating Next remains reachable with 200% enlargement',await p.evaluate(()=>{const r=document.getElementById('nextBtn').getBoundingClientRect();return r.left>=0&&r.top>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1;}));
+ check('Causal engines and new zone logic pass',engines.pass,engines);check('No JavaScript page errors',errors.length===0,errors);
+}catch(e){check('Browser audit completed',false,e.stack);}finally{await browser?.close();if(server)await new Promise(r=>server.close(r));}
+const report={version:'3.7.1',target:remote||'local final build',verifiedAt:new Date().toISOString(),passed:tests.filter(t=>t.pass).length,total:tests.length,pass:tests.every(t=>t.pass)&&engines.pass,engines,tests,errors};await mkdir('public',{recursive:true});await writeFile('public/'+(remote?'post-deployment-zones-audit.json':'zones-audit.json'),JSON.stringify(report,null,2));console.log('AUDIT',report.passed+'/'+report.total,'ENGINES',engines.passed+'/'+engines.total);if(!report.pass)process.exitCode=1;
