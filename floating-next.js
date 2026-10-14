@@ -47,6 +47,9 @@
   document.addEventListener('focusin',schedule);document.addEventListener('focusout',schedule);document.addEventListener('click',schedule);
   for(const e of document.querySelectorAll('.modal-backdrop,.milestone-overlay,#infoPopover,.mobile-entry-dock,.toast'))new MutationObserver(schedule).observe(e,{attributes:true,attributeFilter:['class','hidden','open']});
   new ResizeObserver(schedule).observe(slot);
+  // Layout changes can move the toolbar without a scroll or slot-size event.
+  new IntersectionObserver(schedule,{threshold:[0,1]}).observe(slot);
+  const chartCard=document.querySelector('.chart-card');if(chartCard)new ResizeObserver(schedule).observe(chartCard);
   const prior=renderAll;renderAll=function(){const result=prior.apply(this,arguments);schedule();return result;};root.renderAll=renderAll;
   root.OSDFloatingNext=Object.freeze({update,schedule,isFloating:()=>floating});schedule();
  }
